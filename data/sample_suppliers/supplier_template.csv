@@ -1,0 +1,4 @@
+supplier_id,name,country,city_or_region,primary_port,latitude,longitude,dependency_percent,lead_time_days,product_categories,approved_alternate_supplier_ids
+SUP001,Aria Packaging Ltd,China,Shenzhen,Port of Shenzhen,22.5431,114.0579,35.0,14,"Electronics, Packaging",SUP002
+SUP002,Oman Oils & Extracts,Oman,Muscat,Port Sultan Qaboos,23.5880,58.3829,25.0,21,"Essential Oils",SUP003
+SUP003,Vietnam Ceramics Co,Vietnam,Da Nang,Da Nang Port,16.0544,108.2022,40.0,18,"Ceramics, Tableware",SUP001
