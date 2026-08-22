@@ -1,0 +1,61 @@
+================================================================================
+           AI SUPPLY CHAIN RISK MONITOR FOR SMB IMPORTERS
+                      SYSTEM ARCHITECTURE DIAGRAM
+================================================================================
+
++------------------------------------------------------------------------------+
+| 1. User Presentation Layer (Streamlit App)                                   |
+|                                                                              |
+| [1_supplier_upload.py]  [2_risk_dashboard.py]  [3_risk_events.py]             |
+| [4_contingency_plans.py] [5_reports.py]                                      |
++---------------------------------------+--------------------------------------+
+                                        |
+                                        v
++------------------------------------------------------------------------------+
+| 2. Multi-Agent Orchestration Layer (LangGraph)                               |
+|                                                                              |
+| (Workflow Start) ---> [Supplier Profile Normalization Node]                  |
+|                                     |                                        |
+|                                     v                                        |
+|                     +-----------------------------------+                    |
+|                     | Concurrent Signal Collection      |                    |
+|                     |  - Geopolitical Agent (GDELT)     |                    |
+|                     |  - Weather & Seismic (NOAA/USGS)  |                    |
+|                     |  - Financial Signal Agent (SEC)   |                    |
+|                     +---------------+-------------------+                    |
+|                                     |                                        |
+|                                     v                                        |
+|                     [Evidence Retrieval & Merging Node]                      |
+|                                     |                                        |
+|                                     v                                        |
+|                           [Risk Scoring Node]                                |
+|                                     |                                        |
+|                   < High Risk / Dependency > 60%? >                          |
+|                             /               \                                |
+|                       (Yes)/                 \(No)                           |
+|                           v                   v                              |
+|           [Human Review Gate]      [Contingency Planning Node]               |
+|            (MemorySaver Halt)                 |                              |
+|                   |                           v                              |
+|            <Reviewer Action>          [Report Writer Node]                   |
+|             /           \                     |                              |
+|   (Approve)/             \(Rework)            v                              |
+|           v               v              (End State)                         |
+|   [Contingency Plan]  [Normalization]                                        |
++------------------------------------------------------------------------------+
+
++-----------------------------+   +--------------------------------------------+
+| 3. RAG & Vector Engine      |   | 4. Data Connectors & External APIs         |
+|                             |   |                                            |
+| [ChromaDB Vector Database]  |   | [GDELT News]    [NOAA Climate] [USGS Seismic]|
+|     (6 Collections)         |   | [ReliefWeb]     [SEC EDGAR]    [OSM Geocode]|
+|             ^               |   +--------------------------------------------+
+|             v               |
+| [HuggingFace Embeddings]    |   +--------------------------------------------+
+|   (Sentence Transformers)   |   | 5. Database & Checkpoint Persistence       |
++-----------------------------+   |                                            |
+                                  | [SQL Database (SQLite / PostgreSQL)]       |
+                                  | [MemorySaver Checkpoints]                  |
+                                  +--------------------------------------------+
+
+================================================================================

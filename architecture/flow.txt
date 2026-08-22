@@ -1,0 +1,116 @@
+================================================================================
+           AI SUPPLY CHAIN RISK MONITOR FOR SMB IMPORTERS
+                  END-TO-END SYSTEM WORKFLOW & ARCHITECTURE
+================================================================================
+
+1. SYSTEM ARCHITECTURE & DATA FLOW DIAGRAM
+--------------------------------------------------------------------------------
+
+   [ USER INPUT ]
+         |  (Upload CSV / Manual Vendor Entry in Streamlit UI: 1_supplier_upload.py)
+         v
+   [ 1. SUPPLIER PROFILE NORMALIZATION NODE ] 
+         |  (Geocodes coordinates via OpenStreetMap, standardizes category tags, saves to SQL DB)
+         |
+         +--------------------------+--------------------------+
+         |                          |                          |
+         v                          v                          v
+   [ 2A. GEOPOLITICAL AGENT ]  [ 2B. WEATHER & SEISMIC ]  [ 2C. FINANCIAL SIGNAL ]
+    - GDELT News API            - NOAA Climate API         - SEC EDGAR API
+    - Port Strikes/Tariffs      - USGS 300km Earthquakes   - Public Filings
+                                - ReliefWeb Disaster       - Debt/Liquidity Check
+         |                          |                          |
+         +--------------------------+--------------------------+
+         |
+         v
+   [ 3. EVIDENCE RETRIEVAL & RAG NODE ]
+         |  (Merges events, queries ChromaDB Vector DB across 6 collections, saves to SQL DB)
+         v
+   [ 4. MULTI-FACTOR RISK SCORING NODE ]
+         |  (Calculates 0-100 weighted score: Geo, Weather, Financial, Dependency %)
+         v
+   < ROUTING CHECK: Score > 50 OR Dependency > 60% OR Human Review Required? >
+         |
+         +---------------------------------------+
+         | YES                                   | NO
+         v                                       v
+   [ 5. HUMAN REVIEW GATE (INTERRUPT) ]    [ 6. CONTINGENCY PLANNING NODE ]
+    - Halts graph state via MemorySaver    - Retrieves playbooks from ChromaDB
+    - User action on 4_contingency_plans   - Volume shift % & Lead-time delta
+    - Decisions:                           - Validates URLs via Allowlist Guardrails
+      * APPROVE -> Continue to Step 6            |
+      * REWORK  -> Route back to Step 1          v
+      * REJECT  -> Terminate Graph        [ 7. REPORT WRITER NODE ]
+         |                                 - Compiles summary report
+         +---------------------------------> - Export CSV/JSON (5_reports.py)
+                                                 |
+                                                 v
+                                           [ END STATE ]
+
+
+2. DETAILED PHASE-BY-PHASE WORKFLOW
+--------------------------------------------------------------------------------
+
+PHASE 1: SUPPLIER PROFILE NORMALIZATION
+- File: src/agents/supplier_profile_agent.py
+- Input: Supplier Name, Country, City, Primary Port, Dependency %, Product Categories.
+- Action: Resolves Latitude & Longitude coordinates using OpenStreetMap Nominatim.
+- Storage: Saves normalized profile into SQL database table 'suppliers'.
+
+PHASE 2: CONCURRENT SIGNAL MINING (3 PARALLEL AGENTS)
+- File: src/graph/workflow.py
+- Action: LangGraph forks execution into 3 parallel agent nodes:
+  * Geopolitical Agent (src/agents/risk_intelligence_agent.py): Queries GDELT API.
+  * Weather & Seismic Agent (src/agents/weather_disaster_agent.py): Queries NOAA, USGS, ReliefWeb.
+  * Financial Signal Agent (src/agents/financial_signal_agent.py): Queries SEC EDGAR.
+
+PHASE 3: EVIDENCE RETRIEVAL & VECTOR RAG ENRICHMENT
+- File: src/rag/retriever.py & src/rag/chroma_client.py
+- Action: Merges raw threat signals and queries ChromaDB vector store across 6 collections:
+  1. supplier_profiles
+  2. risk_events
+  3. regional_risk_profiles
+  4. financial_evidence
+  5. contingency_playbooks
+  6. supplier_performance
+- Storage: Saves normalized risk events into SQL database table 'risk_events'.
+
+PHASE 4: MULTI-FACTOR RISK SCORING
+- File: src/agents/risk_scoring_agent.py
+- Rule Config: guardrails/risk_scoring_rules.yaml
+- Formula: Composite Score = (0.35 * Geo) + (0.30 * Weather) + (0.20 * Financial) + (0.15 * Dependency)
+- Severity Mapping: 0-25 (Low), 26-50 (Medium), 51-75 (High), 76-100 (Critical).
+
+PHASE 5: HUMAN INTERRUPT GATE (HUMAN-IN-THE-LOOP)
+- File: src/graph/routing.py & src/graph/checkpoints.py
+- Action: LangGraph checkpointer (MemorySaver) pauses state execution if high/critical risk.
+- UI Page: pages/4_contingency_plans.py
+- Choices:
+  * Approve -> Resume workflow to generate contingency plan.
+  * Rework  -> Send back to Phase 1 with updated parameters.
+  * Reject   -> Safely cancel execution without operational changes.
+
+PHASE 6: GUARDRAILED CONTINGENCY PLANNING
+- File: src/agents/contingency_agent.py
+- Action: Drafts mitigation strategy (volume shifts, lead-time buffers, secondary backup vendors).
+- Guardrails: guardrails/validators.py checks links against guardrails/source_allowlist.yaml.
+- Storage: Saves draft plan to SQL database table 'contingency_plans'.
+
+PHASE 7: REPORT WRITING & DASHBOARD EXPORT
+- File: src/agents/report_writer_agent.py
+- Action: Synthesizes risk scores, active alerts, and approved contingency plans.
+- UI Page: pages/5_reports.py (Export as CSV or JSON).
+
+
+3. PROJECT COMPONENT MAP
+--------------------------------------------------------------------------------
+
+  FRONTEND UI        Streamlit App (app.py, pages/1_supplier_upload.py ... 5_reports.py)
+  ORCHESTRATION      LangGraph (src/graph/workflow.py, routing.py, state.py, checkpoints.py)
+  AI AGENTS          7 Specialist Agents (src/agents/*.py)
+  RAG ENGINE         ChromaDB & HuggingFace Embeddings (src/rag/*.py)
+  CONNECTORS         GDELT, NOAA, USGS, ReliefWeb, SEC EDGAR (src/connectors/*.py)
+  GUARDRAILS         Allowlist, Validators, Prompt & Scoring Rules (guardrails/*)
+  PERSISTENCE        SQLAlchemy ORM + SQLite/PostgreSQL (src/services/database.py)
+
+================================================================================
