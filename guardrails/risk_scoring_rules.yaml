@@ -1,0 +1,15 @@
+# Risk Scoring Weights (Must sum to 1.0)
+weights:
+  geopolitical: 0.25
+  weather: 0.20
+  earthquake: 0.15
+  port_disruption: 0.20
+  financial: 0.10
+  logistics: 0.10
+
+# Severity Score Map
+severity_scores:
+  low: 2.0
+  medium: 5.0
+  high: 8.0
+  critical: 10.0

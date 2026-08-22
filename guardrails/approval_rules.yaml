@@ -1,0 +1,11 @@
+# Rules triggering human approval
+review_triggers:
+  min_overall_risk_score: 50.0  # Trigger if overall score is 50.0 or above
+  trigger_severities:
+    - high
+    - critical
+  trigger_risk_types:
+    - geopolitical
+    - financial
+    - port_disruption
+  force_review_on_alternate_supplier: true  # Always require approval if alternate supplier is recommended

@@ -1,0 +1,18 @@
+# Allowlist of acceptable evidence sources
+allowed_sources:
+  geopolitical:
+    - gdeltproject.org
+    - reliefweb.int
+    - un.org
+    - reuters.com
+    - apnews.com
+  weather:
+    - noaa.gov
+    - weather.gov
+    - metoffice.gov.uk
+  earthquake:
+    - usgs.gov
+  financial:
+    - sec.gov
+    - bloomberg.com
+    - ft.com
