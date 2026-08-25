@@ -56,8 +56,13 @@ def setup_logging():
     
     # Disable logs noise from third-party libraries unless debug
     if log_level != logging.DEBUG:
-        for lib in ["urllib3", "requests", "chromadb", "openai", "httpcore", "huggingface_hub"]:
-            logging.getLogger(lib).setLevel(logging.WARNING)
+        for lib in ["urllib3", "requests", "chromadb", "openai", "httpcore", "huggingface_hub", "transformers", "httpx", "sentence_transformers", "asyncio"]:
+            logging.getLogger(lib).setLevel(logging.ERROR)
+        try:
+            import transformers
+            transformers.logging.set_verbosity_error()
+        except Exception:
+            pass
             
     logging.info(f"Logging initialized. Level: {settings.LOG_LEVEL}, file: {APP_LOG_FILE}")
     log_production_stage("SYSTEM_INIT", "SUCCESS", "Logging subsystem operational.")

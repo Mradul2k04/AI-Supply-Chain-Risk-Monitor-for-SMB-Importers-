@@ -84,8 +84,12 @@ def get_embedding_provider():
     Loads Hugging Face embedding function (BAAI/bge-small-en-v1.5).
     Falls back to MockEmbeddingFunction if load fails.
     """
-    logger.info(f"Configuring Hugging Face embedding provider: model={EMBEDDING_MODEL}")
-    
+    # Ensure HF_TOKEN is populated from HUGGINGFACEHUB_API_TOKEN if set
+    hf_token = os.getenv("HUGGINGFACEHUB_API_TOKEN") or os.getenv("HF_TOKEN")
+    if hf_token:
+        os.environ["HF_TOKEN"] = hf_token
+        os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
+
     # Try loading HuggingFaceEmbeddings
     try:
         try:

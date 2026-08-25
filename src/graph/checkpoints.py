@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from src.graph.workflow import app_graph
 from src.graph.state import RiskMonitorState
 
@@ -50,7 +50,8 @@ def get_workflow_state(thread_id: str) -> Optional[Dict[str, Any]]:
 def resume_workflow_with_decision(
     thread_id: str,
     status: str,  # "approved", "rejected", "rework"
-    feedback: Optional[str] = None
+    feedback: Optional[str] = None,
+    contingency_plans: Optional[List[Any]] = None
 ) -> Dict[str, Any]:
     """
     Updates the state checkpoint with human review choices and resumes execution.
@@ -59,10 +60,14 @@ def resume_workflow_with_decision(
     
     logger.info(f"Resuming thread {thread_id} with status={status}, feedback={feedback}")
     
+    update_dict = {"review_status": status, "review_feedback": feedback}
+    if contingency_plans:
+        update_dict["contingency_plans"] = contingency_plans
+        
     # Update the thread state values
     app_graph.update_state(
         config,
-        {"review_status": status, "review_feedback": feedback},
+        update_dict,
         as_node="human_review_gate"
     )
     

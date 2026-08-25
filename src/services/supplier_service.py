@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from src.services.database import DBSupplier
+from src.services.database import DBSupplier, DBContingencyPlan, DBSupplierRiskAssessment, DBRiskEvent, DBAuditLog
 from src.schemas.supplier import Supplier
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,52 @@ def upsert_supplier(db: Session, supplier: Supplier) -> Supplier:
     db.commit()
     return supplier
 
+def bulk_upsert_suppliers(db: Session, suppliers: List[Supplier]) -> int:
+    if not suppliers:
+        return 0
+        
+    supplier_ids = [s.supplier_id for s in suppliers]
+    existing_db_supps = db.query(DBSupplier).filter(DBSupplier.supplier_id.in_(supplier_ids)).all()
+    existing_map = {s.supplier_id: s for s in existing_db_supps}
+    
+    new_records = []
+    for s in suppliers:
+        if s.supplier_id in existing_map:
+            db_supp = existing_map[s.supplier_id]
+            db_supp.name = s.name
+            db_supp.country = s.country
+            db_supp.city_or_region = s.city_or_region
+            db_supp.latitude = s.latitude
+            db_supp.longitude = s.longitude
+            db_supp.product_categories = s.product_categories
+            db_supp.primary_port = s.primary_port
+            db_supp.dependency_percent = s.dependency_percent
+            db_supp.lead_time_days = s.lead_time_days
+            db_supp.approved_alternate_supplier_ids = s.approved_alternate_supplier_ids
+        else:
+            db_supp = DBSupplier(
+                supplier_id=s.supplier_id,
+                name=s.name,
+                country=s.country,
+                city_or_region=s.city_or_region,
+                latitude=s.latitude,
+                longitude=s.longitude,
+                product_categories=s.product_categories,
+                primary_port=s.primary_port,
+                dependency_percent=s.dependency_percent,
+                lead_time_days=s.lead_time_days,
+                approved_alternate_supplier_ids=s.approved_alternate_supplier_ids
+            )
+            new_records.append(db_supp)
+            existing_map[s.supplier_id] = db_supp
+            
+    if new_records:
+        db.add_all(new_records)
+        
+    db.commit()
+    logger.info(f"Successfully bulk upserted {len(suppliers)} suppliers into database.")
+    return len(suppliers)
+
 def delete_supplier(db: Session, supplier_id: str) -> bool:
     db_supp = db.query(DBSupplier).filter(DBSupplier.supplier_id == supplier_id).first()
     if db_supp:
@@ -88,8 +134,20 @@ def delete_supplier(db: Session, supplier_id: str) -> bool:
     return False
 
 def clear_all_suppliers(db: Session) -> int:
+    db.query(DBContingencyPlan).delete()
+    db.query(DBSupplierRiskAssessment).delete()
+    db.query(DBRiskEvent).delete()
+    db.query(DBAuditLog).delete()
     deleted = db.query(DBSupplier).delete()
     db.commit()
-    logger.info(f"Cleared all {deleted} suppliers from database.")
+    
+    # Also reset ChromaDB vector collections
+    try:
+        from src.rag.chroma_client import get_chroma_manager
+        get_chroma_manager().reset_user_collections()
+    except Exception as e:
+        logger.warning(f"Could not reset ChromaDB collections: {e}")
+        
+    logger.info(f"Cleared all {deleted} suppliers and associated risk records from database and vector store.")
     return deleted
 

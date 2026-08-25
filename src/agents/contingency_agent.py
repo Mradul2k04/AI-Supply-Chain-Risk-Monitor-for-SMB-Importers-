@@ -168,13 +168,30 @@ def run_contingency_planner_agent(
             alternates=supplier.approved_alternate_supplier_ids,
             event_title=trigger_event.title,
             event_severity=trigger_event.severity,
-            event_desc=trigger_event.evidence_text,
-            playbook_evidence=playbook_content
+            event_desc=str(trigger_event.evidence_text or "")[:1000],
+            playbook_evidence=str(playbook_content or "")[:1000]
         )
         
-        response_text = llm.invoke(formatted_prompt).content
-        if hasattr(response_text, "content"):
-            response_text = response_text.content
+        # Execute LLM call with rate-limit backoff retry loop
+        import time
+        max_retries = 3
+        backoff_delay = 2.0
+        response_obj = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                response_obj = llm.invoke(formatted_prompt)
+                break
+            except Exception as llm_err:
+                err_str = str(llm_err).lower()
+                if ("429" in err_str or "rate limit" in err_str or "too many requests" in err_str) and attempt < max_retries:
+                    logger.warning(f"Groq 429 Rate Limit hit on attempt {attempt}/{max_retries}. Retrying in {backoff_delay}s...")
+                    time.sleep(backoff_delay)
+                    backoff_delay *= 2.0
+                else:
+                    raise llm_err
+
+        response_text = response_obj.content if hasattr(response_obj, "content") else response_obj
             
         # Strip markdown json wrappers if present
         clean_json = str(response_text).strip()

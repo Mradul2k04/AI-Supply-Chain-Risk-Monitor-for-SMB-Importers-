@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import logging
 from src.services.database import SessionLocal
-from src.services.supplier_service import upsert_supplier, list_suppliers, clear_all_suppliers
+from src.services.supplier_service import upsert_supplier, bulk_upsert_suppliers, list_suppliers, clear_all_suppliers
 from src.agents.supplier_profile_agent import run_supplier_profile_agent
 from src.services.ui_helper import inject_premium_theme
 
@@ -58,10 +58,9 @@ with col_b:
     st.caption("Remove previous records before ingesting your CSV file.")
     if st.button("Clear All Suppliers from DB", type="secondary"):
         count = clear_all_suppliers(db)
+        st.session_state.clear()
         st.success(f"Cleared {count} supplier records. Ready for your new CSV upload!")
         st.rerun()
-
-
 
 st.markdown("---")
 
@@ -78,80 +77,88 @@ if uploaded_file is not None:
         st.write("Preview of Uploaded Data:")
         st.dataframe(df)
         
-        if st.button("Process and Ingest Suppliers"):
-            ingested = 0
-            for idx, row in df.iterrows():
-                # Flexible helper to retrieve key from row dynamically
-                def get_val(keys):
-                    for k in keys:
-                        if k in row and pd.notna(row[k]):
-                            return row[k]
-                    return None
+        auto_clear_db = st.checkbox(
+            "Clear previous suppliers & start fresh before ingesting this CSV",
+            value=True,
+            help="When enabled, old suppliers and risk events are wiped so dashboard metrics and resilience scores calculate purely for your new CSV file."
+        )
 
-                # Extract values dynamically
-                supplier_id = str(get_val(["supplier_id", "Supplier_ID"]) or target_id.strip() or f"SUP_{idx}")
-                name = str(get_val(["name", "Name"]) or f"Supplier {supplier_id}")
-                country = str(get_val(["country", "Country"]) or "Unknown")
-                city_or_region = str(get_val(["city_or_region", "City/Region", "City", "Region"]) or "")
-                if city_or_region == "None" or city_or_region == "nan": city_or_region = ""
-                primary_port = str(get_val(["primary_port", "Primary Port", "Port"]) or "")
-                if primary_port == "None" or primary_port == "nan": primary_port = ""
-                
-                latitude = get_val(["latitude", "Latitude", "Lat"])
-                if latitude is not None: latitude = float(latitude)
-                longitude = get_val(["longitude", "Longitude", "Lon", "Lng"])
-                if longitude is not None: longitude = float(longitude)
-                
-                # Dependency Calculation
-                dependency_percent = get_val(["dependency_percent", "Dependency %", "Dependency"])
-                if dependency_percent is not None:
-                    dependency_percent = float(dependency_percent)
-                else:
-                    # Fallback calculation if shipment demand/volume are present
-                    volume = get_val(["Shipment_Volume_Tons"])
-                    demand = get_val(["Monthly_Demand_Tons"])
-                    if volume is not None and demand is not None and float(demand) > 0:
-                        dependency_percent = round((float(volume) / float(demand)) * 100.0, 1)
+        file_key = f"ingested_{uploaded_file.name}_{len(df)}"
+
+        if st.session_state.get(file_key):
+            st.info("ℹ️ This file has already been ingested. Upload a new file or reset the database to re-ingest.")
+        else:
+            if st.button("Process and Ingest Suppliers", type="primary"):
+                with st.spinner("Normalizing and bulk saving suppliers..."):
+                    if auto_clear_db:
+                        clear_all_suppliers(db)
+
+                    normalized_suppliers = []
+                    for idx, row in df.iterrows():
+                        def get_val(keys):
+                            for k in keys:
+                                if k in row and pd.notna(row[k]):
+                                    return row[k]
+                            return None
+
+                        supplier_id = str(get_val(["supplier_id", "Supplier_ID"]) or target_id.strip() or f"SUP_{idx}")
+                        name = str(get_val(["name", "Name"]) or f"Supplier {supplier_id}")
+                        country = str(get_val(["country", "Country"]) or "Unknown")
+                        city_or_region = str(get_val(["city_or_region", "City/Region", "City", "Region"]) or "")
+                        if city_or_region in ("None", "nan"): city_or_region = ""
+                        primary_port = str(get_val(["primary_port", "Primary Port", "Port"]) or "")
+                        if primary_port in ("None", "nan"): primary_port = ""
                         
-                # Lead Time days mapping
-                lead_time_days = get_val(["lead_time_days", "Lead Time", "Transit_Time_Days"])
-                if lead_time_days is not None:
-                    lead_time_days = int(float(lead_time_days))
+                        latitude = get_val(["latitude", "Latitude", "Lat"])
+                        if latitude is not None: latitude = float(latitude)
+                        longitude = get_val(["longitude", "Longitude", "Lon", "Lng"])
+                        if longitude is not None: longitude = float(longitude)
+                        
+                        dependency_percent = get_val(["dependency_percent", "Dependency %", "Dependency"])
+                        if dependency_percent is not None:
+                            dependency_percent = float(dependency_percent)
+                        else:
+                            volume = get_val(["Shipment_Volume_Tons"])
+                            demand = get_val(["Monthly_Demand_Tons"])
+                            if volume is not None and demand is not None and float(demand) > 0:
+                                dependency_percent = round((float(volume) / float(demand)) * 100.0, 1)
+                                
+                        lead_time_days = get_val(["lead_time_days", "Lead Time", "Transit_Time_Days"])
+                        if lead_time_days is not None:
+                            lead_time_days = int(float(lead_time_days))
+                            
+                        cats_raw = get_val(["product_categories", "Product Categories", "Product_Type", "Product Type"])
+                        cats = [c.strip() for c in str(cats_raw).split(",") if c.strip()] if cats_raw else []
+                            
+                        alts_raw = get_val(["approved_alternate_supplier_ids", "approved_alternate_suppliers", "Alternate_Suppliers", "Alternate Suppliers", "approved_alternates"])
+                        alts = [a.strip() for a in str(alts_raw).split(",") if a.strip()] if alts_raw else []
+                            
+                        raw_dict = {
+                            "supplier_id": supplier_id,
+                            "name": name,
+                            "country": country,
+                            "city_or_region": city_or_region if city_or_region else None,
+                            "primary_port": primary_port if primary_port else None,
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "dependency_percent": dependency_percent,
+                            "lead_time_days": lead_time_days,
+                            "product_categories": cats,
+                            "approved_alternate_supplier_ids": alts
+                        }
+                        
+                        normalized_suppliers.append(run_supplier_profile_agent(raw_dict))
+
+                    # Deduplicate by unique supplier_id (e.g. multi-shipment CSV files)
+                    unique_suppliers = list({s.supplier_id: s for s in normalized_suppliers}.values())
+                    ingested = bulk_upsert_suppliers(db, unique_suppliers)
+                    st.session_state[file_key] = True
                     
-                # Product Categories list extraction
-                cats_raw = get_val(["product_categories", "Product Categories", "Product_Type", "Product Type"])
-                cats = []
-                if cats_raw:
-                    cats = [c.strip() for c in str(cats_raw).split(",") if c.strip()]
-                    
-                # Alternate IDs list extraction
-                alts_raw = get_val(["approved_alternate_supplier_ids", "approved_alternate_supplier_ids", "approved_alternate_suppliers"])
-                alts = []
-                if alts_raw:
-                    alts = [a.strip() for a in str(alts_raw).split(",") if a.strip()]
-                    
-                raw_dict = {
-                    "supplier_id": supplier_id,
-                    "name": name,
-                    "country": country,
-                    "city_or_region": city_or_region if city_or_region else None,
-                    "primary_port": primary_port if primary_port else None,
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "dependency_percent": dependency_percent,
-                    "lead_time_days": lead_time_days,
-                    "product_categories": cats,
-                    "approved_alternate_supplier_ids": alts
-                }
-                
-                normalized_supplier = run_supplier_profile_agent(raw_dict)
-                upsert_supplier(db, normalized_supplier)
-                ingested += 1
-                
-            st.success(f"Successfully normalized and saved {ingested} supplier profiles!")
-            from src.services.session_service import get_or_create_session_id, add_session_message
-            sess_id = get_or_create_session_id()
-            add_session_message(db, sess_id, f"Successfully ingested {ingested} supplier profiles", "success")
+                    st.success(f"Successfully normalized and saved {ingested} unique supplier profiles (from {len(df)} records) in a single bulk batch!")
+                    from src.services.session_service import get_or_create_session_id, add_session_message
+                    sess_id = get_or_create_session_id()
+                    add_session_message(db, sess_id, f"Successfully bulk ingested {ingested} supplier profiles", "success")
+                    st.rerun()
     except Exception as e:
         st.error(f"Failed to process CSV file: {e}")
         from src.services.session_service import get_or_create_session_id, add_session_message

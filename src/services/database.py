@@ -16,11 +16,11 @@ try:
     if DATABASE_URL.startswith("sqlite"):
         engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
     else:
-        # Try creating engine and executing a simple test connection
-        engine = create_engine(DATABASE_URL)
+        # Try creating engine with 10-second connection timeout to accommodate Neon cold-starts
+        engine = create_engine(DATABASE_URL, connect_args={"connect_timeout": 10})
         with engine.connect() as conn:
             pass
-        logger.info("Successfully connected to the configured database.")
+        logger.info("Successfully connected to the configured primary database.")
 except Exception as e:
     logger.warning(
         f"Failed to connect to primary database ({DATABASE_URL}): {e}. "

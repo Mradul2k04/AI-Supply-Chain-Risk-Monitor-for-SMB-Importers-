@@ -68,6 +68,20 @@ class ChromaDBManager:
             raise ValueError(f"Collection {name} not found.")
         return self.collections[name]
 
+    def reset_user_collections(self):
+        """Clears dynamic user data from ChromaDB collections."""
+        user_cols = ["supplier_profiles", "risk_events", "supplier_performance"]
+        for col_name in user_cols:
+            if col_name in self.collections:
+                try:
+                    col = self.collections[col_name]
+                    existing_ids = col.get().get("ids", [])
+                    if existing_ids:
+                        col.delete(ids=existing_ids)
+                        logger.info(f"Cleared {len(existing_ids)} entries from ChromaDB collection {col_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to clear Chroma collection {col_name}: {e}")
+
 # Global singleton client
 chroma_manager = None
 

@@ -34,8 +34,8 @@ with col1:
         unsafe_allow_html=True
     )
 
-critical_alerts = sum(1 for e in active_events if e.severity == "critical")
-high_alerts = sum(1 for e in active_events if e.severity == "high")
+critical_alerts = sum(1 for e in active_events if str(e.severity).lower() == "critical")
+high_alerts = sum(1 for e in active_events if str(e.severity).lower() == "high")
 
 with col2:
     st.markdown(
@@ -61,7 +61,14 @@ with col3:
 
 # Retrieve assessments count
 db_assessments = db.query(DBSupplierRiskAssessment).all()
-avg_risk = sum(a.overall_risk_score for a in db_assessments) / len(db_assessments) if db_assessments else 0.0
+if db_assessments:
+    avg_risk = sum(a.overall_risk_score for a in db_assessments) / len(db_assessments)
+elif active_events:
+    # Compute average threat severity from active risk events when no suppliers are uploaded yet
+    severity_scores = {"critical": 90.0, "high": 75.0, "medium": 50.0, "low": 20.0}
+    avg_risk = sum(severity_scores.get(str(e.severity).lower(), 50.0) for e in active_events) / len(active_events)
+else:
+    avg_risk = 0.0
 
 with col4:
     st.markdown(
@@ -213,17 +220,21 @@ else:
                 )
                 
             # Render assessment summary
-            st.markdown(
-                f"""
-                <div class="risk-card">
-                    <h4>Overall Risk Score: <span class="badge-{state_values['risk_assessment'].risk_level}">{state_values['risk_assessment'].overall_risk_score}</span></h4>
-                    <p><strong>Operational Impact:</strong> {state_values['risk_assessment'].operational_impact}</p>
-                    <p><strong>Confidence:</strong> {int(state_values['risk_assessment'].confidence * 100)}%</p>
-                    <p><strong>Review Status:</strong> {review_status.upper()}</p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            assessment_obj = state_values.get("risk_assessment") or assessment
+            if assessment_obj:
+                st.markdown(
+                    f"""
+                    <div class="risk-card">
+                        <h4>Overall Risk Score: <span class="badge-{getattr(assessment_obj, 'risk_level', 'medium')}">{getattr(assessment_obj, 'overall_risk_score', 'N/A')}</span></h4>
+                        <p><strong>Operational Impact:</strong> {getattr(assessment_obj, 'operational_impact', 'Pending evaluation.')}</p>
+                        <p><strong>Confidence:</strong> {int(getattr(assessment_obj, 'confidence', 0.8) * 100)}%</p>
+                        <p><strong>Review Status:</strong> {review_status.upper()}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.info("Risk evaluation in progress or pending workflow run.")
             
             # Show events contributing
             events = state_values.get("all_events", [])

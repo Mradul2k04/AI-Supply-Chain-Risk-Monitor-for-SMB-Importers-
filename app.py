@@ -51,18 +51,26 @@ st.markdown(
 db = SessionLocal()
 try:
     total_suppliers = db.query(DBSupplier).count()
-    active_events = db.query(DBRiskEvent).count()
+    all_events = db.query(DBRiskEvent).all()
+    active_events = len(all_events)
     pending_contingencies = db.query(DBContingencyPlan).filter(DBContingencyPlan.approval_status == "draft").count()
     risk_assessments = db.query(DBSupplierRiskAssessment).all()
     
     critical_high_count = sum(1 for ra in risk_assessments if ra.risk_level in ["critical", "high"])
     
-    # Calculate weighted resiliency index score
+    # Calculate weighted resiliency index score dynamically from database metrics
     if risk_assessments:
         avg_score = sum(ra.overall_risk_score for ra in risk_assessments) / len(risk_assessments)
-        resiliency_index = max(0.0, min(100.0, round((1.0 - avg_score) * 100, 1)))
+        # Normalize to percentage scale
+        risk_pct = avg_score * 100.0 if avg_score <= 1.0 else avg_score
+        resiliency_index = max(0.0, min(100.0, round(100.0 - risk_pct, 1)))
+    elif all_events:
+        # Dynamically compute index from average threat severity when supplier assessments do not exist yet
+        severity_impact = {"critical": 75.0, "high": 50.0, "medium": 30.0, "low": 10.0}
+        avg_risk_impact = sum(severity_impact.get(str(e.severity).lower(), 35.0) for e in all_events) / len(all_events)
+        resiliency_index = max(0.0, min(100.0, round(100.0 - avg_risk_impact, 1)))
     else:
-        resiliency_index = 94.5
+        resiliency_index = 100.0
 finally:
     db.close()
 

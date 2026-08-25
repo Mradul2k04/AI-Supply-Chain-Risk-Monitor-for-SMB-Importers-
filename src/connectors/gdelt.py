@@ -73,13 +73,15 @@ def fetch_gdelt_risk_signals(country: str, region: str = None, port: str = None)
             data = response.json()
             articles = data.get("articles", [])
             for art in articles:
+                title = art.get("title") or "GDELT News Alert"
+                seendate = art.get("seendate") or "Reported news event regarding supply chain indicators"
                 events.append({
-                    "title": art.get("title", "GDELT News Alert"),
-                    "evidence_text": art.get("seendate", "Reported news event regarding supply chain indicators: ") + art.get("title"),
-                    "source_url": art.get("url", "https://www.gdeltproject.org"),
-                    "source_name": art.get("source", "GDELT Project"),
+                    "title": title,
+                    "evidence_text": f"{seendate}: {title}",
+                    "source_url": art.get("url") or "https://www.gdeltproject.org",
+                    "source_name": art.get("source") or "GDELT Project",
                     "severity": "medium",
-                    "risk_type": "geopolitical" if "conflict" in art.get("title", "").lower() else "port_disruption",
+                    "risk_type": "geopolitical" if "conflict" in title.lower() else "port_disruption",
                     "event_date": datetime.utcnow()
                 })
     except Exception as e:

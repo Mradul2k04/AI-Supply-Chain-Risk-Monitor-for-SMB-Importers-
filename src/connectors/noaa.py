@@ -68,15 +68,21 @@ def fetch_noaa_weather_signals(country: str, city_or_region: str = None) -> List
                     else:
                         severity = "medium"
 
+                    headline = props.get("headline") or ""
+                    description = props.get("description") or ""
+                    evidence_text = f"{headline}\n{description}".strip() if (headline or description) else "Active NOAA Weather Alert reported."
+
                     events.append({
-                        "title": props.get("event", "Active Weather Alert"),
-                        "evidence_text": props.get("headline", "") + "\n" + props.get("description", ""),
-                        "source_url": props.get("@id", "https://api.weather.gov"),
+                        "title": props.get("event") or "Active Weather Alert",
+                        "evidence_text": evidence_text,
+                        "source_url": props.get("@id") or "https://api.weather.gov",
                         "source_name": "NOAA Weather Alerts",
                         "severity": severity,
                         "risk_type": "weather",
                         "event_date": datetime.utcnow()
                     })
+                    if len(events) >= 3:
+                        break
         except Exception as e:
             logger.warning(f"NOAA Weather API query failed: {e}")
 

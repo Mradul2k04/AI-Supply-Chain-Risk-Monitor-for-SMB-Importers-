@@ -82,7 +82,7 @@ for s in suppliers:
             # Generate dry-run preview plans for display
             from src.agents.contingency_agent import run_contingency_planner_agent
             for event in events:
-                if event.severity in ["medium", "high", "critical"]:
+                if str(event.severity).lower() in ["medium", "high", "critical"]:
                     draft_plans.append(run_contingency_planner_agent(s, event))
                     
             if not draft_plans:
@@ -117,8 +117,8 @@ for s in suppliers:
             with btn_col1:
                 if st.button("✅ Approve Plan & Trigger Procurement", key=f"app_{s.supplier_id}"):
                     with st.spinner("Processing approval and completing state workflow..."):
-                        # Resume thread workflow with 'approved' status
-                        resumed_state = resume_workflow_with_decision(thread_id, "approved", feedback_input)
+                        # Resume thread workflow with 'approved' status and pass previewed draft_plans
+                        resumed_state = resume_workflow_with_decision(thread_id, "approved", feedback_input, contingency_plans=draft_plans)
                         
                         # Persist final plans and assessment into SQL DB
                         db_sess = SessionLocal()
