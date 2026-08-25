@@ -17,6 +17,8 @@ coverage.xml
 *.cover
 *.py.cover
 .hypothesis/
+CODE_WALKTHROUGH.md
+.streamlit
 
 # Virtual Environments
 venv/
