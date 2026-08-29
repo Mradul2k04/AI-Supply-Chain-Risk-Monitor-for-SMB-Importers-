@@ -7,7 +7,7 @@ import pydeck as pdk
 from src.graph.workflow import initialize_system
 from src.rag.ingestion import ingest_default_knowledge_base
 from src.services.ui_helper import inject_premium_theme
-from src.services.database import SessionLocal, DBSupplier, DBRiskEvent, DBContingencyPlan, DBSupplierRiskAssessment
+from src.services.database import SessionLocal, DBSupplier, DBRiskEvent, DBContingencyPlan, DBSupplierRiskAssessment, IS_FALLBACK_DB
 
 st.set_page_config(
     page_title="AI Supply Chain Risk Monitor",
@@ -27,6 +27,9 @@ def setup_application():
 
 setup_application()
 inject_premium_theme()
+
+if IS_FALLBACK_DB:
+    st.warning("⚠️ Primary Cloud Database (Neon PostgreSQL) unreachable. Automatically running on local SQLite backup database.")
 
 # Header & Live System Status Badge
 st.markdown(

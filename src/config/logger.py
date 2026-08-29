@@ -48,7 +48,8 @@ def setup_logging():
     file_handler = RotatingFileHandler(
         APP_LOG_FILE,
         maxBytes=10 * 1024 * 1024,  # 10MB per log file limit
-        backupCount=5
+        backupCount=5,
+        encoding="utf-8"
     )
     file_handler.setFormatter(log_formatter)
     file_handler.setLevel(log_level)

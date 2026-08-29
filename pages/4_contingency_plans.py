@@ -76,14 +76,18 @@ for s in suppliers:
             # or we can display a dry run preview of the contingency plan details!
             # Since we have run_contingency_planner_agent available, we can run a dry-run draft preview directly on the UI so the user sees exactly what they are approving! That is extremely helpful!
             
-            draft_plans = []
-            events = state_values.get("all_events", [])
-            
-            # Generate dry-run preview plans for display
-            from src.agents.contingency_agent import run_contingency_planner_agent
-            for event in events:
-                if str(event.severity).lower() in ["medium", "high", "critical"]:
-                    draft_plans.append(run_contingency_planner_agent(s, event))
+            draft_plans = state_values.get("contingency_plans", [])
+            if not draft_plans:
+                session_key = f"draft_plans_{s.supplier_id}"
+                if session_key in st.session_state:
+                    draft_plans = st.session_state[session_key]
+                else:
+                    events = state_values.get("all_events", [])
+                    qualifying_events = [e for e in events if str(e.severity).lower() in ["medium", "high", "critical"]]
+                    if qualifying_events:
+                        from src.agents.contingency_agent import run_contingency_planner_agent_batch
+                        draft_plans = run_contingency_planner_agent_batch(s, qualifying_events)
+                    st.session_state[session_key] = draft_plans
                     
             if not draft_plans:
                 st.info("No active high/critical events requiring a contingency plan. System is clear.")

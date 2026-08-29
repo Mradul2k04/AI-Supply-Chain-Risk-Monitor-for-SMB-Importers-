@@ -93,7 +93,7 @@ if uploaded_file is not None:
                     if auto_clear_db:
                         clear_all_suppliers(db)
 
-                    normalized_suppliers = []
+                    raw_dicts = []
                     for idx, row in df.iterrows():
                         def get_val(keys):
                             for k in keys:
@@ -133,7 +133,7 @@ if uploaded_file is not None:
                         alts_raw = get_val(["approved_alternate_supplier_ids", "approved_alternate_suppliers", "Alternate_Suppliers", "Alternate Suppliers", "approved_alternates"])
                         alts = [a.strip() for a in str(alts_raw).split(",") if a.strip()] if alts_raw else []
                             
-                        raw_dict = {
+                        raw_dicts.append({
                             "supplier_id": supplier_id,
                             "name": name,
                             "country": country,
@@ -145,13 +145,13 @@ if uploaded_file is not None:
                             "lead_time_days": lead_time_days,
                             "product_categories": cats,
                             "approved_alternate_supplier_ids": alts
-                        }
-                        
-                        normalized_suppliers.append(run_supplier_profile_agent(raw_dict))
+                        })
 
-                    # Deduplicate by unique supplier_id (e.g. multi-shipment CSV files)
-                    unique_suppliers = list({s.supplier_id: s for s in normalized_suppliers}.values())
-                    ingested = bulk_upsert_suppliers(db, unique_suppliers)
+                    # Deduplicate raw records by unique supplier_id BEFORE agent normalization (e.g. multi-shipment CSV files)
+                    unique_raw_dicts = list({d["supplier_id"]: d for d in raw_dicts}.values())
+                    normalized_suppliers = [run_supplier_profile_agent(rd) for rd in unique_raw_dicts]
+
+                    ingested = bulk_upsert_suppliers(db, normalized_suppliers)
                     st.session_state[file_key] = True
                     
                     st.success(f"Successfully normalized and saved {ingested} unique supplier profiles (from {len(df)} records) in a single bulk batch!")

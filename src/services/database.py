@@ -3,11 +3,11 @@ import json
 import logging
 from datetime import datetime
 from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, DateTime, Text, JSON, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from src.config.settings import settings
 
 DATABASE_URL = settings.DATABASE_URL
+IS_FALLBACK_DB = False
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ try:
             pass
         logger.info("Successfully connected to the configured primary database.")
 except Exception as e:
+    IS_FALLBACK_DB = True
     logger.warning(
         f"Failed to connect to primary database ({DATABASE_URL}): {e}. "
         f"Reverting to local SQLite database (sqlite:///./supply_chain_risk.db) for safety."

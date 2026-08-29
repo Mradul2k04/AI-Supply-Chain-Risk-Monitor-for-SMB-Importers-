@@ -118,20 +118,23 @@ def contingency_planning_node(state: RiskMonitorState) -> Dict[str, Any]:
             db.close()
         return {"contingency_plans": existing_plans}
 
-    plans = []
-    # Generate contingency plans for medium/high/critical events
-    for event in events:
-        if str(event.severity).lower() in ["medium", "high", "critical"]:
-            plan = run_contingency_planner_agent(supplier, event)
-            plans.append(plan)
-            
-            # Save draft plan to DB
-            db = SessionLocal()
-            try:
+    # Filter medium/high/critical qualifying events
+    qualifying_events = [e for e in events if str(e.severity).lower() in ["medium", "high", "critical"]]
+    
+    if qualifying_events:
+        from src.agents.contingency_agent import run_contingency_planner_agent_batch
+        plans = run_contingency_planner_agent_batch(supplier, qualifying_events)
+        
+        # Save draft plans to DB
+        db = SessionLocal()
+        try:
+            for plan in plans:
                 save_contingency_plan(db, plan)
-            finally:
-                db.close()
-                
+        finally:
+            db.close()
+    else:
+        plans = []
+        
     return {"contingency_plans": plans}
 
 def report_writing_node(state: RiskMonitorState) -> Dict[str, Any]:
@@ -209,13 +212,33 @@ CUSTOM_MSG_PACK_MODULES = [
 def create_smart_checkpointer():
     """
     Initializes the optimal LangGraph checkpointer:
-    - Thread-safe PostgresSaver with ConnectionPool for production/Railway when PostgreSQL is accessible
+    - Thread-safe PostgresSaver with ConnectionPool when PostgreSQL is configured and accessible
     - Persistent SqliteSaver for disk-backed persistence in local development
     - MemorySaver as safety fallback
     """
     custom_serde = JsonPlusSerializer(allowed_msgpack_modules=CUSTOM_MSG_PACK_MODULES)
 
-    # 1. Try SQLite Checkpointer (Disk persistent)
+    # 1. Try PostgreSQL Checkpointer if configured as primary database
+    if settings.DATABASE_URL.startswith("postgresql"):
+        try:
+            from psycopg_pool import ConnectionPool
+            from langgraph.checkpoint.postgres import PostgresSaver
+            
+            # Ensure database schema tables (checkpoints, blobs, writes) exist
+            try:
+                with PostgresSaver.from_conn_string(settings.DATABASE_URL, serde=custom_serde) as setup_cp:
+                    setup_cp.setup()
+            except Exception as se:
+                logger.debug(f"PostgresSaver setup check info: {se}")
+
+            pool = ConnectionPool(settings.DATABASE_URL, max_size=20, kwargs={"connect_timeout": 10})
+            checkpointer = PostgresSaver(pool, serde=custom_serde)
+            logger.info("Successfully initialized thread-safe PostgreSQL LangGraph Checkpointer.")
+            return checkpointer
+        except Exception as e:
+            logger.warning(f"PostgresSaver connection attempt failed: {e}. Falling back to SQLite Checkpointer.")
+
+    # 2. Try SQLite Checkpointer (Disk persistent)
     try:
         from langgraph.checkpoint.sqlite import SqliteSaver
         db_dir = "data"
@@ -228,23 +251,6 @@ def create_smart_checkpointer():
         return checkpointer
     except Exception as e:
         logger.debug(f"SqliteSaver checkpointer info: {e}")
-
-    # 2. Try PostgreSQL Checkpointer if configured
-    if settings.DATABASE_URL.startswith("postgresql"):
-        try:
-            from psycopg_pool import ConnectionPool
-            from langgraph.checkpoint.postgres import PostgresSaver
-            
-            pool = ConnectionPool(settings.DATABASE_URL, max_size=20, kwargs={"connect_timeout": 10})
-            checkpointer = PostgresSaver(pool, serde=custom_serde)
-            try:
-                checkpointer.setup()
-            except Exception:
-                pass
-            logger.info("Successfully initialized thread-safe PostgreSQL LangGraph Checkpointer.")
-            return checkpointer
-        except Exception as e:
-            logger.debug(f"PostgresSaver connection info: {e}")
 
     # 3. MemorySaver fallback
     logger.info("Initialized MemorySaver LangGraph Checkpointer.")

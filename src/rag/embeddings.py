@@ -1,7 +1,7 @@
 import os
 import hashlib
 import logging
-from typing import List, Any
+from typing import List, Dict, Any
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -41,6 +41,9 @@ class MockEmbeddingFunction(EmbeddingFunction):
             vector.append(val)
         return vector
 
+    def get_config(self) -> Dict[str, Any]:
+        return {"name": "MockEmbeddingFunction", "dimensionality": self.dimensionality}
+
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         return [self.embed_query(t) for t in texts]
 
@@ -53,6 +56,9 @@ class ChromaLangChainEmbeddingAdapter(EmbeddingFunction):
     """
     def __init__(self, langchain_embeddings: Any):
         self.langchain_embeddings = langchain_embeddings
+
+    def get_config(self) -> Dict[str, Any]:
+        return {"model_name": self.name()}
 
     def name(self) -> str:
         if hasattr(self.langchain_embeddings, "model_name"):
